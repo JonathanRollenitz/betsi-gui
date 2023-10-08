@@ -1,4 +1,4 @@
-from betsi.gui import runbetsi
+from .gui import runbetsi
 
 def main():
     runbetsi()  # pylint: disable=no-value-for-parameter

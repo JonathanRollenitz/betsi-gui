@@ -16,8 +16,8 @@ import traceback
 
 # core lib
 plt.ion()
-from betsi.lib import *
-from betsi.plotting import *
+from .lib import *
+from .plotting import *
 
 
 class BETSI_gui(QMainWindow):
@@ -398,6 +398,7 @@ class BETSI_widget(QWidget):
                 fig.canvas.mpl_connect('pick_event', self.point_picker)
             self.current_fig = fig
             self.current_fig.tight_layout(pad=0.3, rect=[0, 0, 1, 0.95])
+            self.current_fig.tight_layout(pad=0.3, rect=(0.0, 0.0, 1.0, 0.95))
             self.current_fig_2 = fig_2
             plt.figure(num=1)
             plt.draw()
