@@ -20,6 +20,8 @@ from pprint import pprint
 from scipy.interpolate import splrep, pchip_interpolate
 matplotlib.use('Qt5Agg')
 
+from dataclasses import dataclass
+
 ##NITROGEN_RADIUS = 1.62E-19
 ##NITROGEN_MOL_VOL = 44.64117195
 AVOGADRO_N = 6.02E+23
@@ -179,6 +181,20 @@ class BETResult:
                 if j == self.knee_index:
                     self.rouq5[i, j] = 1
 
+@dataclass
+class Settings:
+    min_num_pts: int
+    min_r2: float
+    use_rouq1: bool
+    use_rouq2: bool
+    use_rouq3: bool
+    use_rouq4: bool
+    use_rouq5: bool
+    max_perc_error: float
+    adsorbate: str
+    cross_sectional_area: float
+    molar_volume: float
+
 class BETFilterAppliedResults:
     """
     Structure obtained from applying a set of custom filters to a BETResult.
@@ -187,43 +203,43 @@ class BETFilterAppliedResults:
     BETFilterAppliedResults object contains all data required to produce any plot.
     """
 
-    def __init__(self, bet_result, **kwargs):
+    def __init__(self, bet_result: BETResult, settings: Settings):
 
         # Transfer all the properties from the original BET calculation
         self.__dict__.update(bet_result.__dict__)
-        self.filter_params = kwargs
+        self.filter_params = settings
 
         # Apply the selected filters in turn
         filter_mask = np.ones_like(bet_result.c)
 
-        if kwargs.get('use_rouq1', True):
+        if settings.use_rouq1:
             filter_mask = filter_mask * bet_result.rouq1
 
-        if kwargs.get('use_rouq2', True):
+        if settings.use_rouq2:
             filter_mask = filter_mask * bet_result.rouq2
 
-        if kwargs.get('use_rouq3', True):
+        if settings.use_rouq3:
             filter_mask = filter_mask * bet_result.rouq3
 
-        if kwargs.get('use_rouq4', True):
-            max_perc_error = kwargs.get('max_perc_error', 20)
+        if settings.use_rouq4:
+            max_perc_error = settings.max_perc_error
             filter_mask = filter_mask * (bet_result.pc_error < max_perc_error)
 
-        if kwargs.get('use_rouq5', False):
+        if settings.use_rouq5:
             filter_mask = filter_mask * bet_result.rouq5
         
-        adsorbate = kwargs.get('adsorbate', "N2")
+        adsorbate = settings.adsorbate
         
         if adsorbate == "Custom":
-            cross_sectional_area[adsorbate] = 1.0E-18 * kwargs.get('cross_sectional_area')
-            mol_vol[adsorbate] = kwargs.get('molar_volume')
+            cross_sectional_area[adsorbate] = 1.0E-18 * settings.cross_sectional_area
+            mol_vol[adsorbate] = settings.molar_volume
 
         # Filter results that have less than the minimum points
-        min_points = kwargs.get('min_num_pts', 10)
+        min_points = settings.min_num_pts
         filter_mask = filter_mask * (bet_result.point_count > min_points)
 
         # Block out results that have less than the minimum R2
-        min_r2 = kwargs.get('min_r2', 0.9)
+        min_r2 = settings.min_r2
         filter_mask = filter_mask * (bet_result.fit_rsquared > min_r2)
 
         ## assert np.sum(filter_mask) != 0, "NO valid areas found"
@@ -319,7 +335,7 @@ class BETFilterAppliedResults:
 
         # Write out the filter settings used to get these results.
         with (filepath / 'filter_summary.json').open('w') as fp:
-            pprint(self.filter_params, fp)
+            pprint(self.filter_params.__dict__, fp)
 
         # Write out the key results.
         with (filepath / 'results.txt').open('w') as fp:
@@ -381,7 +397,7 @@ class BETFilterAppliedResults:
                    self.pc_error, delimiter=',', fmt='%1.3f')
 
 
-def analyse_file(input_file, output_dir=None, **kwargs):
+def analyse_file(input_file, settings: Settings, output_dir=None):
     """ Entry point for performing BET analysis on a single named csv file.
     If the output directory does not exist, one is created automatically."""
 
@@ -400,28 +416,29 @@ def analyse_file(input_file, output_dir=None, **kwargs):
     # Compute unfiltered results
     pressure, q_adsorbed, comments_to_data = get_data(input_file=input_file)
     betsi_unfiltered = BETResult(pressure, q_adsorbed)
+    betsi_unfiltered.comments_to_data = comments_to_data
+    betsi_unfiltered.original_pressure_data = pressure
+    betsi_unfiltered.original_q_adsorbed_data = q_adsorbed
 
     # Apply custom filters:
-    betsi_filtered = BETFilterAppliedResults(betsi_unfiltered, **kwargs)
+    betsi_filtered = BETFilterAppliedResults(betsi_unfiltered, settings)
 
     # Export the results
-    betsi_filtered.export(output_subdir)
+    if hasattr(betsi_filtered, "min_area"):
+        betsi_filtered.export(output_subdir)
 
-    # Create and save a PDF plot
-    fig = create_matrix_plot(betsi_filtered, name=input_file.stem)
+        # Create and save a PDF plot
+        fig = create_matrix_plot(betsi_filtered, settings.use_rouq3, settings.use_rouq4, name=input_file.stem)
 
-    #fig.tight_layout(pad=0.3, rect=[0, 0, 1, 0.95])
-    fig.savefig(
-        str(output_subdir / f'{input_file.stem}_combined_plot.pdf'), bbox_inches='tight')
-    #plt.tight_layout()
-    plt.show()
-    
-    # Create and show Diagnostics plot
-    fig_2 = regression_diagnostics_plots(betsi_filtered,name=input_file.stem)
-    fig_2.tight_layout(pad=.3, rect=[0,0,1,.95])
-    plt.show()
-
-
-if __name__ == "__main__":
-    analyse_file(
-        Path(r"/Users/johannesosterrieth/Desktop/q_nu1105.csv"))
+        #fig.tight_layout(pad=0.3, rect=[0, 0, 1, 0.95])
+        fig.savefig(
+            str(output_subdir / f'{input_file.stem}_combined_plot.pdf'), bbox_inches='tight')
+        #plt.tight_layout()
+        # plt.show()
+        
+        # Create and show Diagnostics plot
+        # fig_2 = regression_diagnostics_plots(betsi_filtered,name=input_file.stem)
+        # fig_2.tight_layout(pad=.3, rect=[0,0,1,.95])
+        # plt.show()
+    else:
+        print(f"Something went wrong skipping: {input_file.stem}")

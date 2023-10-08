@@ -1,0 +1,5 @@
+venv
+betsi_gui.egg-info
+build/
+dist/
+*/__pycache__/*

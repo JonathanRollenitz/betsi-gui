@@ -1,5 +1,4 @@
 # basics
-import os
 
 from PyQt5 import QtCore
 from PyQt5 import QtGui
@@ -7,7 +6,7 @@ from PyQt5 import QtGui
 from PyQt5.QtWidgets import *
 # matplotlib for plotting
 import matplotlib.pyplot as plt
-from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg as FigureCanvas
+from matplotlib.backends.backend_qtagg import FigureCanvasQTAgg as FigureCanvas
 from matplotlib.figure import Figure
 import logging
 import sys
@@ -86,8 +85,6 @@ class BETSI_gui(QMainWindow):
         
         ## New lines added
     def import_file(self):
-        ## file_path = QFileDialog.getOpenFileName(
-        ##     self, 'Select File', os.getcwd(), '*.csv')[0]
         file_path = QFileDialog.getOpenFileName(
             self, 'Select File', os.getcwd(), "*.csv *.aif *.txt")[0]
         self.betsi_widget.target_filepath = file_path
@@ -164,7 +161,7 @@ class BETSI_widget(QWidget):
         self.current_fig = None
         self.current_fig_2 = None
 
-        self.target_filepath = None
+        self.target_filepath: None|str = None
         self.bet_object = None
         self.bet_filter_result = None
 
@@ -368,9 +365,7 @@ class BETSI_widget(QWidget):
 
     def maybe_run_calculation(self):
         self.check_rouq_compatibility()
-        ## New lines added
         self.check_adsorbate_compatibility()
-        ##if self.target_filepath is not None:
         if self.target_filepath is not None:
             if self.adsorbate_combo_box.currentText() != "Custom":
                 self.run_calculation()
@@ -383,12 +378,14 @@ class BETSI_widget(QWidget):
         plt.close('all')
         if self.current_fig is not None:
             self.current_fig.clear()
+        if self.current_fig_2 is not None:
             self.current_fig_2.clear()
         try:
             # check if the figure has been closed, if it doesn't reset it to none and replot
             if self.current_fig is not None and not plt.fignum_exists(self.current_fig.number):
                 self.current_fig = None
                 self.current_fig_2 = None
+
             fig = create_matrix_plot(self.bet_filter_result, self.rouq3_tick.isChecked(), self.rouq4_tick.isChecked(),  name=Path(
                 self.target_filepath).stem,  fig=self.current_fig)
             fig_2 = regression_diagnostics_plots(self.bet_filter_result, name=Path(
@@ -397,9 +394,10 @@ class BETSI_widget(QWidget):
             if self.current_fig is None:
                 fig.canvas.mpl_connect('pick_event', self.point_picker)
             self.current_fig = fig
-            self.current_fig.tight_layout(pad=0.3, rect=[0, 0, 1, 0.95])
             self.current_fig.tight_layout(pad=0.3, rect=(0.0, 0.0, 1.0, 0.95))
             self.current_fig_2 = fig_2
+            
+            # ensure windows are in foreground
             plt.figure(num=1)
             plt.draw()
             plt.figure(num=2).canvas.manager.window.move(500,0)
@@ -417,18 +415,6 @@ class BETSI_widget(QWidget):
             self.show_dialog(warnings, information)
             return
 
-        use_rouq1 = self.rouq1_tick.isChecked()
-        use_rouq2 = self.rouq2_tick.isChecked()
-        use_rouq3 = self.rouq3_tick.isChecked()
-        use_rouq4 = self.rouq4_tick.isChecked()
-        use_rouq5 = self.rouq5_tick.isChecked()
-        min_num_pts = int(self.min_points_edit.text())
-        min_r2 = float(self.minr2_edit.text())
-        max_perc_error = float(self.rouq4_edit.text())
-        adsorbate = self.adsorbate_combo_box.currentText()
-        cross_sectional_area = float(self.adsorbate_cross_section_edit.text())
-        molar_volume = float(self.adsorbate_molar_volume_edit.text())
-
         ## New lines or modifications made
         # Retrieve the BETSI results object if non-existent
         if self.bet_object is None:
@@ -445,19 +431,7 @@ class BETSI_widget(QWidget):
             
 
         # Apply the currently selected filters.
-        self.bet_filter_result = BETFilterAppliedResults(self.bet_object,
-                                                         min_num_pts=min_num_pts,
-                                                         min_r2=min_r2,
-                                                         use_rouq1=use_rouq1,
-                                                         use_rouq2=use_rouq2,
-                                                         use_rouq3=use_rouq3,
-                                                         use_rouq4=use_rouq4,
-                                                         use_rouq5=use_rouq5,
-                                                         max_perc_error=max_perc_error,
-                                                         adsorbate=adsorbate, 
-                                                         cross_sectional_area=cross_sectional_area,
-                                                         molar_volume=molar_volume)
-        
+        self.bet_filter_result = BETFilterAppliedResults(self.bet_object, self.get_settings())
         ## Adds interpolated points to adsorption data if no valid area was found by the original data
         if not self.bet_filter_result.has_valid_areas:
             iter_num = 0
@@ -482,18 +456,7 @@ class BETSI_widget(QWidget):
                 self.bet_object.original_q_adsorbed_data = original_q_adsorbed_data
                 
                 # Apply the currently selected filters.
-                self.bet_filter_result = BETFilterAppliedResults(self.bet_object,
-                                                                 min_num_pts=min_num_pts,
-                                                                 min_r2=min_r2,
-                                                                 use_rouq1=use_rouq1,
-                                                                 use_rouq2=use_rouq2,
-                                                                 use_rouq3=use_rouq3,
-                                                                 use_rouq4=use_rouq4,
-                                                                 use_rouq5=use_rouq5,
-                                                                 max_perc_error=max_perc_error,
-                                                                 adsorbate=adsorbate, 
-                                                                 cross_sectional_area=cross_sectional_area,
-                                                                 molar_volume=molar_volume)
+                self.bet_filter_result = BETFilterAppliedResults(self.bet_object, self.get_settings())
                 iter_num += 1
         
         ## Warnings for pop-up message box
@@ -580,20 +543,24 @@ class BETSI_widget(QWidget):
             self.current_fig_2.savefig(str(output_subdir / f'{target_path.stem}_RD_plots.pdf'))
             plt.show()
 
+    def get_settings(self):
+        return Settings(
+            use_rouq1 = self.rouq1_tick.isChecked(),
+            use_rouq2 = self.rouq2_tick.isChecked(),
+            use_rouq3 = self.rouq3_tick.isChecked(),
+            use_rouq4 = self.rouq4_tick.isChecked(),
+            use_rouq5 = self.rouq5_tick.isChecked(),
+            min_num_pts = int(self.min_points_edit.text()),
+            min_r2 = float(self.minr2_edit.text()),
+            max_perc_error = float(self.rouq4_edit.text()),
+            adsorbate = self.adsorbate_combo_box.currentText(),
+            cross_sectional_area = float(self.adsorbate_cross_section_edit.text()),
+            molar_volume = float(self.adsorbate_molar_volume_edit.text()),
+        )
+
+
     def analyse_directory(self, dir_path):
         """ Run BETSI on all csv files within dir_path. Use current filter config."""
-        use_rouq1 = self.rouq1_tick.isChecked()
-        use_rouq2 = self.rouq2_tick.isChecked()
-        use_rouq3 = self.rouq3_tick.isChecked()
-        use_rouq4 = self.rouq4_tick.isChecked()
-        use_rouq5 = self.rouq5_tick.isChecked()
-        min_num_points = int(self.min_points_edit.text())
-        min_r2 = float(self.minr2_edit.text())
-        max_perc_error = float(self.rouq4_edit.text())
-        
-        adsorbate = self.adsorbate_combo_box.currentText()
-        cross_sectional_area = float(self.adsorbate_cross_section_edit.text())
-        molar_volume = float(self.adsorbate_molar_volume_edit.text())
         
         ## New lines added
         ##csv_paths = Path(dir_path).glob('*.csv')
@@ -608,19 +575,7 @@ class BETSI_widget(QWidget):
             self.populate_table(csv_path=str(file_path))
 
             # Run the analysis
-            analyse_file(input_file=str(file_path),
-                         output_dir=self.output_dir,
-                         min_num_pts=min_num_points,
-                         min_r2=min_r2,
-                         use_rouq1=use_rouq1,
-                         use_rouq2=use_rouq2,
-                         use_rouq3=use_rouq3,
-                         use_rouq4=use_rouq4,
-                         use_rouq5=use_rouq5,
-                         max_perc_error=max_perc_error,
-                         adsorbate=adsorbate,
-                         cross_sectional_area=cross_sectional_area,
-                         molar_volume=molar_volume)
+            analyse_file(input_file=str(file_path), output_dir=self.output_dir, settings=self.get_settings())
 
     def set_defaults(self):
         """Sets the widget to default state
@@ -741,8 +696,6 @@ class BETSI_widget(QWidget):
             self.adsorbate_molar_volume_edit.setEnabled(False)            
             self.adsorbate_cross_section_edit.setText("{0:0.3f}".format(cross_sectional_area[self.adsorbate_combo_box.currentText()] * 1.0E18))
             self.adsorbate_molar_volume_edit.setText("{0:0.3f}".format(mol_vol[self.adsorbate_combo_box.currentText()]))
-            #self.adsorbate_cross_section_edit.setText("0.0")
-            #self.adsorbate_molar_volume_edit.setText("0.0")
         else:
             self.adsorbate_cross_section_edit.setEnabled(True)
             self.adsorbate_molar_volume_edit.setEnabled(True)
